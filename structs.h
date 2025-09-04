@@ -31,8 +31,10 @@ struct gNode
 {
     double i;
     double j;
+    uint8_t type;  // 新增字段
+    double queue_threshold;
     std::vector<int> neighbors;
-    gNode(double i_ = -1, double j_ = -1):i(i_), j(j_) {}
+    gNode(double i_ = -1, double j_ = -1, uint8_t type_ = 0, double queue_threshold_ = -1.0):i(i_), j(j_), type(type_), queue_threshold(queue_threshold_) {}
     ~gNode() { neighbors.clear(); }
 };
 

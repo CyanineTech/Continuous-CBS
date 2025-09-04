@@ -55,5 +55,21 @@ set( HEADER_FILES
 	 simplex/simplexexceptions.h
 	 simplex/sizemismatchexception.h
 	 simplex/variable.h)
-
-add_executable( CCBS ${SOURCE_FILES} ${HEADER_FILES} )
+add_library(my_ccbs SHARED 
+     map.cpp
+     config.cpp
+     tinyxml2.cpp
+     xml_logger.cpp 
+     map.cpp 
+     heuristic.cpp 
+     sipp.cpp 
+     task.cpp
+     cbs.cpp 
+	 simplex/columnset.cpp
+	 simplex/constraint.cpp
+	 simplex/matrix.cpp
+	 simplex/objectivefunction.cpp
+	 simplex/simplex.cpp
+	 simplex/variable.cpp
+)
+# add_executable( CCBS ${SOURCE_FILES} ${HEADER_FILES} )

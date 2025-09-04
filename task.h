@@ -17,6 +17,47 @@ class Task
 private:
     std::vector<Agent> agents;
 public:
+    // 添加一个 getter
+    const std::vector<Agent>& get_agents() const { return agents; };
+    
+    // 修改特定 agent 的 goal_id
+    void set_agent_goal_id(int agent_index, int goal_id) {
+        if (agent_index >= 0 && agent_index < agents.size()) {
+            agents[agent_index].goal_id = goal_id;
+        }
+    }
+    
+    // 修改特定 agent 的 start_id
+    void set_agent_start_id(int agent_index, int start_id) {
+        if (agent_index >= 0 && agent_index < agents.size()) {
+            agents[agent_index].start_id = start_id;
+        }
+    }
+
+    // 修改特定 agent 的 id
+    void set_agent_id(int agent_index, int id) {
+        if (agent_index >= 0 && agent_index < agents.size()) {
+            agents[agent_index].id = id;
+        }
+    }
+
+    // 添加一个 agent 到容器末尾
+    void add_agent(const Agent& agent) {
+        agents.emplace_back(agent);
+    }
+
+    // 清空所有 agents
+    void clear_agents() {
+        agents.clear();
+    }
+
+    // 用新的 agent 替换指定索引位置的 agent
+    void replace_agent(int agent_index, const Agent& new_agent) {
+        if (agent_index >= 0 && agent_index < agents.size()) {
+            agents[agent_index] = new_agent;
+        }
+    }
+
     bool get_task(const char* FileName, int k=-1);
     unsigned int get_agents_size() const { return agents.size(); }
     void make_ids(int width);

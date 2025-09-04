@@ -25,6 +25,24 @@ private:
     bool get_grid(const char* FileName);
     bool get_roadmap(const char* FileName);
 public:
+    const std::vector<gNode>& get_nodes() const { return nodes; }
+    const std::vector<std::vector<Node>>& get_valid_moves() const { return valid_moves; }
+    
+    void remove_edge(int node_a, int node_b) {
+        if (node_a >= 0 && node_a < valid_moves.size()) {
+            auto& moves = valid_moves[node_a];
+            moves.erase(std::remove_if(moves.begin(), moves.end(),
+                       [node_b](const Node& n) { return n.id == node_b; }),
+                       moves.end());
+        }
+        if (node_b >= 0 && node_b < valid_moves.size()) {
+            auto& moves = valid_moves[node_b];
+            moves.erase(std::remove_if(moves.begin(), moves.end(),
+                       [node_a](const Node& n) { return n.id == node_a; }),
+                       moves.end());
+        }
+    }    
+    Map(){agent_size=0.1; connectedness=2;}
     Map(double size, int k){ agent_size = size; connectedness = k; }
     ~Map(){}
     int  get_size() const { return size; }

@@ -218,6 +218,7 @@ bool Map::get_grid(const char* FileName)
     return true;
 }
 
+// add key2 & key3 ...
 bool Map::get_roadmap(const char *FileName)
 {
     tinyxml2::XMLDocument doc;
@@ -230,29 +231,45 @@ bool Map::get_roadmap(const char *FileName)
     std::string value;
     std::stringstream stream;
     root = doc.FirstChildElement("graphml")->FirstChildElement("graph");
-    for(element = root->FirstChildElement("node"); element; element = element->NextSiblingElement("node"))
-    {
-        data = element->FirstChildElement();
 
-        stream.str("");
-        stream.clear();
-        stream << data->GetText();
-        stream >> value;
-        auto it = value.find_first_of(",");
-        stream.str("");
-        stream.clear();
-        stream << value.substr(0, it);
-        double i;
-        stream >> i;
-        stream.str("");
-        stream.clear();
-        value.erase(0, ++it);
-        stream << value;
-        double j;
-        stream >> j;
+    for (element = root->FirstChildElement("node"); element;
+         element = element->NextSiblingElement("node")) 
+    {
         gNode node;
-        node.i = i;
-        node.j = j;
+        node.type = 0; // 默认值
+        node.queue_threshold=-1.0; // 默认值
+        // 遍历所有 <data> 子元素
+        tinyxml2::XMLElement* data = element->FirstChildElement("data");
+        while(data) {
+            const char* key = data->Attribute("key");
+            if(key) {
+                // 处理坐标 (key0)
+                if(strcmp(key, "key0") == 0) {
+                    std::string coordStr = data->GetText();
+                    size_t comma1 = coordStr.find(',');
+                    size_t comma2 = coordStr.find(',', comma1+1); // 处理第三个值（如有）
+                    
+                    node.i = std::stod(coordStr.substr(0, comma1));
+                    node.j = std::stod(coordStr.substr(comma1+1, comma2 - comma1 -1));
+                }
+                // 处理类型 (key2)
+                else if(strcmp(key, "key2") == 0) {
+                    const char* typeText = data->GetText();
+                    if(typeText) {
+                        node.type = static_cast<uint8_t>(std::stoi(typeText));
+                    }
+                }
+                // 处理排队阈值 (key3)
+                else if(strcmp(key, "key3") == 0) {
+                    const char* thresholdText = data->GetText();
+                    if(thresholdText) {
+                        node.queue_threshold = std::stod(thresholdText);
+                    }
+                }
+            }
+            data = data->NextSiblingElement("data");
+        }
+
         nodes.push_back(node);
     }
     for(element = root->FirstChildElement("edge"); element; element = element->NextSiblingElement("edge"))
