@@ -73,3 +73,10 @@ add_library(my_ccbs SHARED
 	 simplex/variable.cpp
 )
 # add_executable( CCBS ${SOURCE_FILES} ${HEADER_FILES} )
+
+# ============ 新增安装规则 ============
+# 安装库文件（供主仓库使用）
+install(TARGETS my_ccbs
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
