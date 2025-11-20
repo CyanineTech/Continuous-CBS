@@ -1,5 +1,25 @@
 #include "cbs.h"
 
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+// 新增
+struct DebugSnapshot {
+  int iteration;
+  // 关于被扩展节点的信息
+  double expanded_cost;
+  unsigned int expanded_conflicts;
+  // 关于 OPEN 列表的信息
+  size_t open_size;
+  double open_best_cost;
+  unsigned int open_best_conflicts;
+  // 关于 FOCAL 列表的信息
+  size_t focal_size;
+  double focal_best_cost;
+  unsigned int focal_best_conflicts;
+};
+
 bool CBS::init_root(const Map &map, const Task &task, const bool &verbose) {
   CBS_Node root;
   tree.set_focal_weight(config.focal_weight);
@@ -258,7 +278,13 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
   solution.init_time =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           std::chrono::high_resolution_clock::now() - t);
-  solution.found = true;
+
+  // 【修改】将 solution.found 的初始设置移到循环之后，并添加快照逻辑
+  solution.found = false;               // 默认设置为 false
+  const int SNAPSHOT_BUFFER_SIZE = 10;  // 保留最后 10 个快照
+  std::vector<DebugSnapshot> snapshots(SNAPSHOT_BUFFER_SIZE);
+  int snapshot_idx = 0;
+
   CBS_Node node;
   std::chrono::duration<double> time_spent;
   int expanded(1);
@@ -272,6 +298,32 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
   int id = 2;
   do {
     auto parent = tree.get_front();
+
+    // 【新增】在扩展节点前，记录快照
+    DebugSnapshot &current_snapshot =
+        snapshots[snapshot_idx % SNAPSHOT_BUFFER_SIZE];
+    if (true) {
+      current_snapshot.iteration = expanded;  // 使用 expanded 作为迭代次数
+      current_snapshot.expanded_cost = parent->cost;
+      current_snapshot.expanded_conflicts = parent->conflicts_num;
+
+      auto open_stats = tree.get_open_best_stats();
+      current_snapshot.open_size =
+          tree.get_open_size() + 1;  // +1 因为 get_front 已经减过1了
+      current_snapshot.open_best_cost = open_stats.first;
+      current_snapshot.open_best_conflicts = open_stats.second;
+
+      if (config.focal_weight > 1.0) {
+        auto focal_stats = tree.get_focal_best_stats();
+        current_snapshot.focal_size = tree.get_focal_size();
+        current_snapshot.focal_best_conflicts = focal_stats.first;
+        current_snapshot.focal_best_cost = focal_stats.second;
+      } else {
+        current_snapshot.focal_size = 0;
+      }
+      snapshot_idx++;
+    }
+
     node = *parent;
     node.cost -= node.h;
     parent->conflicts.clear();
@@ -291,7 +343,8 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
       if (verbose) {
         ROS_WARN("cbsKernal: find_solution(): No conflicts found, break");
       }
-      break;  // i.e. no conflicts => solution found
+      solution.found = true;  // 【修改】在这里设置 solution.found 为 true
+      break;                  // i.e. no conflicts => solution found
     }
     if (!cardinal_conflicts.empty()) {
       conflict = get_conflict(cardinal_conflicts);
@@ -442,6 +495,37 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
       break;
     }
   } while (tree.get_open_size() > 0);
+
+  // 【新增】在函数返回前，检查是否失败并打印快照
+  if (!solution.found) {
+    std::cout << "\n-------------------- PLANNING FAILED --------------------"
+              << std::endl;
+    std::cout << "Total iterations: " << expanded << ". Printing last "
+              << std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE)
+              << " snapshots:" << std::endl;
+
+    for (int i = 0; i < std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE); ++i) {
+      int idx_to_print =
+          (snapshot_idx - std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE) + i) %
+          SNAPSHOT_BUFFER_SIZE;
+      const auto &s = snapshots[idx_to_print];
+
+      std::cout << "\n--- Snapshot at Iteration: " << s.iteration << " ---"
+                << std::endl;
+      std::cout << "  - Expanding Node:  Cost=" << s.expanded_cost
+                << ", Conflicts=" << s.expanded_conflicts << std::endl;
+      std::cout << "  - OPEN Status:     Size=" << s.open_size
+                << ", BestCost=" << s.open_best_cost << " (w/ "
+                << s.open_best_conflicts << " conflicts)" << std::endl;
+      if (config.focal_weight > 1.0) {
+        std::cout << "  - FOCAL Status:    Size=" << s.focal_size
+                  << ", BestConflicts=" << s.focal_best_conflicts
+                  << " (w/ cost " << s.focal_best_cost << ")" << std::endl;
+      }
+    }
+    std::cout << "---------------------------------------------------------"
+              << std::endl;
+  }
 
   // 计算最终的时间消耗
   auto final_time = std::chrono::duration_cast<std::chrono::duration<double>>(
