@@ -280,8 +280,8 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
           std::chrono::high_resolution_clock::now() - t);
 
   // 【修改】将 solution.found 的初始设置移到循环之后，并添加快照逻辑
-  solution.found = false;               // 默认设置为 false
-  const int SNAPSHOT_BUFFER_SIZE = 10;  // 保留最后 10 个快照
+  solution.found = false;              // 默认设置为 false
+  const int SNAPSHOT_BUFFER_SIZE = 3;  // 保留最后 10 个快照
   std::vector<DebugSnapshot> snapshots(SNAPSHOT_BUFFER_SIZE);
   int snapshot_idx = 0;
 
@@ -500,6 +500,20 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
   if (!solution.found) {
     std::cout << "\n-------------------- PLANNING FAILED --------------------"
               << std::endl;
+
+    // Print search configuration parameters
+    std::cout << "Search Configuration Parameters:" << std::endl;
+    std::cout << "  - Focal Weight: " << config.focal_weight << std::endl;
+    std::cout << "  - Use Cardinal: "
+              << (config.use_cardinal ? "true" : "false") << std::endl;
+    std::cout << "  - Use Disjoint Splitting: "
+              << (config.use_disjoint_splitting ? "true" : "false")
+              << std::endl;
+    std::cout << "  - HLH Type: " << config.hlh_type << std::endl;
+    std::cout << "  - Agent Size: " << config.agent_size << std::endl;
+    std::cout << "  - Time Limit: " << config.timelimit << std::endl;
+    std::cout << std::endl;
+
     std::cout << "Total iterations: " << expanded << ". Printing last "
               << std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE)
               << " snapshots:" << std::endl;
