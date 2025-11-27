@@ -280,17 +280,19 @@ std::vector<Path> SIPP::find_partial_path(std::vector<Node> starts,
 
   // 如果 open 列表为空了，但是还没有找到路径，则搜索失败
   if (true) {
-    ROS_WARN("findPartialPath(): failed:");
-    ROS_WARN("starts size %zu", starts.size());
+    if (false) ROS_WARN("findPartialPath(): failed:");
+    if (false) ROS_WARN("starts size %zu", starts.size());
     for (const auto &start_node : starts) {
-      ROS_WARN("Node %d, Safe Interval: [%.2f, %.2f]", start_node.id,
-               start_node.interval.first, start_node.interval.second);
+      if (false)
+        ROS_WARN("Node %d, Safe Interval: [%.2f, %.2f]", start_node.id,
+                 start_node.interval.first, start_node.interval.second);
     }
 
-    ROS_WARN("goals size %zu", goals.size());
+    if (false) ROS_WARN("goals size %zu", goals.size());
     for (const auto &goal_node : goals) {
-      ROS_WARN("Node %d, Safe Interval: [%.2f, %.2f]", goal_node.id,
-               goal_node.interval.first, goal_node.interval.second);
+      if (false)
+        ROS_WARN("Node %d, Safe Interval: [%.2f, %.2f]", goal_node.id,
+                 goal_node.interval.first, goal_node.interval.second);
     }
   }
 
@@ -403,10 +405,12 @@ Path SIPP::find_path(Agent agent, const Map &map, std::list<Constraint> cons,
           current_start_id = starts[0].id;  // 后续段的起点是上一段的终点
         }
 
-        ROS_WARN(
-            "[SIPP FAIL] Agent %d: For segment [%d -> %d], the goal node %d is "
-            "completely blocked by constraints.",
-            agent.id, current_start_id, current_goal_id, current_goal_id);
+        if (false)
+          ROS_WARN(
+              "[SIPP FAIL] Agent %d: For segment [%d -> %d], the goal node %d "
+              "is "
+              "completely blocked by constraints.",
+              agent.id, current_start_id, current_goal_id, current_goal_id);
         // --- END: 修正后的日志 ---
         return Path();
       }
@@ -433,15 +437,20 @@ Path SIPP::find_path(Agent agent, const Map &map, std::list<Constraint> cons,
       results = new_results;
       if (results.empty()) {
         if (!starts.empty() && !goals.empty()) {
-          ROS_WARN(
-              "[SIPP FAIL] Agent %d: Path search failed for segment from node "
-              "%d to node %d.",
-              agent.id, starts[0].id, goals[0].id);
+          // 这里报错
+          if (false)
+            ROS_WARN(
+                "[SIPP FAIL] Agent %d: Path search failed for segment from "
+                "node "
+                "%d to node %d.",
+                agent.id, starts[0].id, goals[0].id);
         } else {
-          ROS_WARN(
-              "[SIPP FAIL] Agent %d: Path search failed at segment %d, results "
-              "are empty.",
-              agent.id, i);
+          if (false)
+            ROS_WARN(
+                "[SIPP FAIL] Agent %d: Path search failed at segment %d, "
+                "results "
+                "are empty.",
+                agent.id, i);
         }
         return Path();
       }
@@ -456,10 +465,11 @@ Path SIPP::find_path(Agent agent, const Map &map, std::list<Constraint> cons,
                           map.get_j(landmarks[i].id2), landmarks[i].t1 + offset,
                           landmarks[i].t2 + offset);
         if (goals.empty()) {
-          ROS_WARN(
-              "[SIPP FAIL] Agent %d: For landmark move [%d -> %d], the "
-              "destination node %d is completely blocked by constraints.",
-              agent.id, landmarks[i].id1, landmarks[i].id2, landmarks[i].id2);
+          if (false)
+            ROS_WARN(
+                "[SIPP FAIL] Agent %d: For landmark move [%d -> %d], the "
+                "destination node %d is completely blocked by constraints.",
+                agent.id, landmarks[i].id1, landmarks[i].id2, landmarks[i].id2);
           return Path();
         }
         new_results.clear();
@@ -496,10 +506,12 @@ Path SIPP::find_path(Agent agent, const Map &map, std::list<Constraint> cons,
 
         results = new_results;
         if (results.empty()) {
-          ROS_WARN(
-              "[SIPP FAIL] Agent %d: Could not find a valid direct connection "
-              "for landmark move from node %d to node %d.",
-              agent.id, landmarks[i].id1, landmarks[i].id2);
+          if (false)
+            ROS_WARN(
+                "[SIPP FAIL] Agent %d: Could not find a valid direct "
+                "connection "
+                "for landmark move from node %d to node %d.",
+                agent.id, landmarks[i].id1, landmarks[i].id2);
           return Path();
         }
       }
@@ -515,10 +527,12 @@ Path SIPP::find_path(Agent agent, const Map &map, std::list<Constraint> cons,
     parts = find_partial_path(starts, goals, map, h_values);
     expanded = int(close.size());
     if (parts[0].cost < 0) {
-      ROS_WARN(
-          "[SIPP FAIL] Agent %d: Path search failed from start node %d to goal "
-          "node %d.",
-          agent.id, agent.start_id, agent.goal_id);
+      if (false)
+        ROS_WARN(
+            "[SIPP FAIL] Agent %d: Path search failed from start node %d to "
+            "goal "
+            "node %d.",
+            agent.id, agent.start_id, agent.goal_id);
       return Path();
     }
     result = parts[0];
