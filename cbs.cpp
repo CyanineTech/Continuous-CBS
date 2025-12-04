@@ -20,9 +20,8 @@ struct DebugSnapshot {
   unsigned int focal_best_conflicts;
 };
 
-bool CBS::init_root(const Map &map, const Task &task,
-                    const bool &verbose = false,
-                    const std::string &prefix = "") {
+bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
+                    const std::string &prefix) {
   CBS_Node root;
   tree.set_focal_weight(config.focal_weight);
   sPath path;
@@ -254,8 +253,7 @@ Conflict CBS::get_conflict(std::list<Conflict> &conflicts) {
 }
 
 Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
-                            const bool verbose = false,
-                            const std::string &prefix = "") {
+                            const bool verbose, const std::string &prefix) {
   if (verbose) {
     ROS_WARN("%scbsKernal: findSolution(): ", prefix.c_str());
   }
