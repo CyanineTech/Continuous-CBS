@@ -20,7 +20,9 @@ struct DebugSnapshot {
   unsigned int focal_best_conflicts;
 };
 
-bool CBS::init_root(const Map &map, const Task &task, const bool &verbose) {
+bool CBS::init_root(const Map &map, const Task &task,
+                    const bool &verbose = false,
+                    const std::string &prefix = "") {
   CBS_Node root;
   tree.set_focal_weight(config.focal_weight);
   sPath path;
@@ -29,8 +31,8 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose) {
     path = planner.find_path(agent, map, {}, h_values);
     if (path.cost < 0) {
       if (verbose) {
-        ROS_WARN("cbsKernal: init_root(): agent %d path.cost %.3f < 0", i,
-                 path.cost);
+        ROS_WARN("%scbsKernal: initRoot(): agent %d path.cost %.3f < 0",
+                 prefix.c_str(), i, path.cost);
       }
 
       return false;
@@ -252,9 +254,10 @@ Conflict CBS::get_conflict(std::list<Conflict> &conflicts) {
 }
 
 Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
-                            const bool verbose) {
+                            const bool verbose = false,
+                            const std::string &prefix = "") {
   if (verbose) {
-    ROS_WARN("cbsKernal: find_solution(): ");
+    ROS_WARN("%scbsKernal: findSolution(): ", prefix.c_str());
   }
 
   config = cfg;
@@ -268,9 +271,10 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
 
   auto t = std::chrono::high_resolution_clock::now();
   int cardinal_solved = 0, semicardinal_solved = 0;
-  if (!this->init_root(map, task, verbose)) {
+  if (!this->init_root(map, task, verbose, prefix)) {
     if (verbose) {
-      ROS_WARN("cbsKernal: find_solution(): init-root() failed");
+      ROS_WARN("%scbsKernal: findSolution(): init-root() failed",
+               prefix.c_str());
     }
 
     return solution;
@@ -341,7 +345,8 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
         cardinal_conflicts.empty()     //
     ) {
       if (verbose) {
-        ROS_WARN("cbsKernal: find_solution(): No conflicts found, break");
+        ROS_WARN("%scbsKernal: findSolution(): No conflicts found, break",
+                 prefix.c_str());
       }
       solution.found = true;  // 【修改】在这里设置 solution.found 为 true
       break;                  // i.e. no conflicts => solution found
@@ -486,9 +491,9 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
     if (time_spent.count() > config.timelimit) {
       if (verbose) {
         ROS_WARN(
-            "cbsKernal: find_solution(): do(): Time limit %.3f exceeded, "
+            "%scbsKernal: findSolution(): do(): Time limit %.3f exceeded, "
             "break!",
-            time_spent.count());
+            prefix.c_str(), time_spent.count());
       }
 
       solution.found = false;
@@ -548,21 +553,22 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
   // 打印搜索结束的统计信息
   if (verbose) {
     ROS_WARN(
-        "cbsKernal: find_solution(): Search completed! Found: %s, Time: %.3fs",
-        solution.found ? "YES" : "NO", final_time.count());
+        "%scbsKernal: findSolution(): Search completed! Found: %s, Time: %.3fs",
+        prefix.c_str(), solution.found ? "YES" : "NO", final_time.count());
     ROS_WARN(
-        "cbsKernal: find_solution(): High-level: expanded %d, generated %d, "
-        "open "
-        "size %d",
-        expanded, int(tree.get_size()), int(tree.get_open_size()));
+        "%scbsKernal: findSolution(): High-level: expanded %d, generated %d, "
+        "open size %d",
+        prefix.c_str(), expanded, int(tree.get_size()),
+        int(tree.get_open_size()));
     ROS_WARN(
-        "cbsKernal: find_solution(): Low-level: searches %d, avg expanded %.1f",
-        low_level_searches,
+        "%scbsKernal: findSolution(): Low-level: searches %d, avg expanded "
+        "%.1f",
+        prefix.c_str(), low_level_searches,
         low_level_searches > 0 ? double(low_level_expanded) / low_level_searches
                                : 0.0);
     ROS_WARN(
-        "cbsKernal: find_solution(): Conflicts: cardinal %d, semicardinal %d",
-        cardinal_solved, semicardinal_solved);
+        "%scbsKernal: findSolution(): Conflicts: cardinal %d, semicardinal %d",
+        prefix.c_str(), cardinal_solved, semicardinal_solved);
   }
 
   solution.paths = get_paths(&node, task.get_agents_size());

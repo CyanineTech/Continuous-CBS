@@ -17,8 +17,10 @@ class CBS {
  public:
   CBS() {}
   Solution find_solution(const Map &map, const Task &task, const Config &cfg,
-                         const bool verbose = false);
-  bool init_root(const Map &map, const Task &task, const bool &verbose = false);
+                         const bool verbose = false,
+                         const std::string &prefix = "");
+  bool init_root(const Map &map, const Task &task, const bool &verbose = false,
+                 const std::string &prefix = "");
   std::list<Constraint> get_constraints(CBS_Node *node, int agent_id = -1);
   // std::list<Constraint> merge_constraints(std::list<Constraint> constraints);
   bool validate_constraints(std::list<Constraint> constraints, int agent);
