@@ -30,12 +30,22 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     path = planner.find_path(agent, map, {}, h_values);
     if (path.cost < 0) {
       if (verbose) {
-        ROS_WARN("%scbsKernal: initRoot(): agent %d path.cost %.3f < 0",
-                 prefix.c_str(), i, path.cost);
+        ROS_WARN("%scbsKernal: initRoot(): i = %d, agent %d path.cost %.3f < 0",
+                 prefix.c_str(), i, agent.id, path.cost);
       }
 
       return false;
     }
+
+    if (verbose) {
+      if (path.agentID != i) {
+        ROS_WARN(
+            "%scbsKernal: initRoot(): i = %d, path.agentID = %d, agent.id %d "
+            "**********************",
+            prefix.c_str(), i, path.agentID, agent.id);
+      }
+    }
+
     root.paths.push_back(path);
     root.cost += path.cost;
   }
@@ -277,6 +287,11 @@ Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
 
     return solution;
   }
+
+  if (verbose) {
+    ROS_WARN("%scbsKernal:  init_root done", prefix.c_str());
+  }
+
   solution.init_time =
       std::chrono::duration_cast<std::chrono::duration<double>>(
           std::chrono::high_resolution_clock::now() - t);
