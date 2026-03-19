@@ -33,10 +33,12 @@ struct gNode {
   double j;
   uint8_t type;  // 新增字段
   double queue_threshold;
+  int8_t docking_orientation;  // 停靠朝向: -1=none, 0=horizontal, 1=vertical, 2=diagonal_left_down, 3=diagonal_right_down
   std::vector<int> neighbors;
   gNode(double i_ = -1, double j_ = -1, uint8_t type_ = 0,
-        double queue_threshold_ = -1.0)
-      : i(i_), j(j_), type(type_), queue_threshold(queue_threshold_) {}
+        double queue_threshold_ = -1.0, int8_t docking_orientation_ = -1)
+      : i(i_), j(j_), type(type_), queue_threshold(queue_threshold_),
+        docking_orientation(docking_orientation_) {}
   ~gNode() { neighbors.clear(); }
 };
 

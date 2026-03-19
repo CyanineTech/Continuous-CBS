@@ -238,6 +238,7 @@ bool Map::get_roadmap(const char *FileName)
         gNode node;
         node.type = 0; // 默认值
         node.queue_threshold=-1.0; // 默认值
+        node.docking_orientation = -1; // 默认无指定方向
         // 遍历所有 <data> 子元素
         tinyxml2::XMLElement* data = element->FirstChildElement("data");
         while(data) {
@@ -264,6 +265,13 @@ bool Map::get_roadmap(const char *FileName)
                     const char* thresholdText = data->GetText();
                     if(thresholdText) {
                         node.queue_threshold = std::stod(thresholdText);
+                    }
+                }
+                // 处理停靠朝向 (key4)
+                else if(strcmp(key, "key4") == 0) {
+                    const char* orientationText = data->GetText();
+                    if(orientationText) {
+                        node.docking_orientation = static_cast<int8_t>(std::stoi(orientationText));
                     }
                 }
             }
