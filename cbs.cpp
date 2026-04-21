@@ -30,8 +30,11 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     path = planner.find_path(agent, map, {}, h_values);
     if (path.cost < 0) {
       if (verbose) {
-        ROS_WARN("%scbsKernal: initRoot(): i = %d, agent %d path.cost %.3f < 0",
-                 prefix.c_str(), i, agent.id, path.cost);
+        ROS_WARN(
+            "%scbsKernal: initRoot(): i = %d, agent %d "
+            "(start=%d, goal=%d) path.cost %.3f < 0",
+            prefix.c_str(), i, agent.id, agent.start_id,
+            agent.goal_id, path.cost);
       }
 
       return false;
