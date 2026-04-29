@@ -1,4 +1,6 @@
 #include "task.h"
+#include <ros/ros.h>
+
 Task::Task()
 {
     agents.clear();
@@ -68,6 +70,8 @@ Agent Task::get_agent(int id) const
 {
     if(id >= 0 && id < int(agents.size()))
         return agents[id];
-    else
+    else {
+        ROS_WARN("task: get-agent(): idx %d out of range (size %zu)", id, agents.size());
         return Agent();
+    }
 }
