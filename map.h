@@ -29,16 +29,24 @@ public:
     const std::vector<std::vector<Node>>& get_valid_moves() const { return valid_moves; }
     
     void remove_edge(int node_a, int node_b) {
-        if (node_a >= 0 && node_a < valid_moves.size()) {
+        if (node_a >= 0 && node_a < (int)valid_moves.size()) {
             auto& moves = valid_moves[node_a];
             moves.erase(std::remove_if(moves.begin(), moves.end(),
                        [node_b](const Node& n) { return n.id == node_b; }),
                        moves.end());
         }
-        if (node_b >= 0 && node_b < valid_moves.size()) {
+        if (node_b >= 0 && node_b < (int)valid_moves.size()) {
             auto& moves = valid_moves[node_b];
             moves.erase(std::remove_if(moves.begin(), moves.end(),
                        [node_a](const Node& n) { return n.id == node_a; }),
+                       moves.end());
+        }
+    }
+    void remove_directed_edge(int from, int to) {
+        if (from >= 0 && from < (int)valid_moves.size()) {
+            auto& moves = valid_moves[from];
+            moves.erase(std::remove_if(moves.begin(), moves.end(),
+                       [to](const Node& n) { return n.id == to; }),
                        moves.end());
         }
     }    
