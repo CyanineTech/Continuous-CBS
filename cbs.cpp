@@ -27,7 +27,11 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
   sPath path;
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     Agent agent = task.get_agent(i);
-    path = planner.find_path(agent, map, {}, h_values);
+    std::list<Constraint> root_constraints;
+    if (i < int(external_constraints_.size())) {
+      root_constraints = external_constraints_.at(i);
+    }
+    path = planner.find_path(agent, map, root_constraints, h_values);
     if (path.cost < 0) {
       if (verbose) {
         ROS_WARN(
@@ -64,14 +68,26 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     if (!config.use_cardinal)
       root.conflicts.push_back(conflict);
     else {
-      auto pathA = planner.find_path(
-          task.get_agent(conflict.agent1), map,
-          {get_constraint(conflict.agent1, conflict.move1, conflict.move2)},
-          h_values);
-      auto pathB = planner.find_path(
-          task.get_agent(conflict.agent2), map,
-          {get_constraint(conflict.agent2, conflict.move2, conflict.move1)},
-          h_values);
+      std::list<Constraint> constraintsA;
+      if (conflict.agent1 >= 0 &&
+          conflict.agent1 < int(external_constraints_.size())) {
+        constraintsA = external_constraints_.at(conflict.agent1);
+      }
+      constraintsA.push_back(
+          get_constraint(conflict.agent1, conflict.move1, conflict.move2));
+
+      std::list<Constraint> constraintsB;
+      if (conflict.agent2 >= 0 &&
+          conflict.agent2 < int(external_constraints_.size())) {
+        constraintsB = external_constraints_.at(conflict.agent2);
+      }
+      constraintsB.push_back(
+          get_constraint(conflict.agent2, conflict.move2, conflict.move1));
+
+      auto pathA = planner.find_path(task.get_agent(conflict.agent1), map,
+                                     constraintsA, h_values);
+      auto pathB = planner.find_path(task.get_agent(conflict.agent2), map,
+                                     constraintsB, h_values);
       // conflict.path1 = pathA;
       // conflict.path2 = pathB;
       if (pathA.cost > root.paths[conflict.agent1].cost &&
@@ -265,14 +281,17 @@ Conflict CBS::get_conflict(std::list<Conflict> &conflicts) {
   return conflict;
 }
 
-Solution CBS::find_solution(const Map &map, const Task &task, const Config &cfg,
-                            const bool verbose, const std::string &prefix) {
+Solution CBS::find_solution(
+    const Map &map, const Task &task, const Config &cfg, const bool verbose,
+    const std::string &prefix,
+    const std::vector<std::list<Constraint>> &external_constraints) {
   if (verbose) {
     ROS_WARN("%scbsKernal: findSolution(): ", prefix.c_str());
   }
 
   config = cfg;
   this->map = &map;
+  external_constraints_ = external_constraints;
   h_values.init(map.get_size(), task.get_agents_size());
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
@@ -750,6 +769,9 @@ void CBS::find_new_conflicts(const Map &map, const Task &task, CBS_Node &node,
 std::list<Constraint> CBS::get_constraints(CBS_Node *node, int agent_id) {
   CBS_Node *curNode = node;
   std::list<Constraint> constraints(0);
+  if (agent_id >= 0 && agent_id < int(external_constraints_.size())) {
+    constraints = external_constraints_.at(agent_id);
+  }
   while (curNode->parent != nullptr) {
     if (agent_id < 0 || curNode->constraint.agent == agent_id)
       constraints.push_back(curNode->constraint);

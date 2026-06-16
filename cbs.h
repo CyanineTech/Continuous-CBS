@@ -18,7 +18,9 @@ class CBS {
   CBS() {}
   Solution find_solution(const Map &map, const Task &task, const Config &cfg,
                          const bool verbose = false,
-                         const std::string &prefix = "");
+                         const std::string &prefix = "",
+                         const std::vector<std::list<Constraint>>
+                             &external_constraints = {});
   bool init_root(const Map &map, const Task &task, const bool &verbose = false,
                  const std::string &prefix = "");
   std::list<Constraint> get_constraints(CBS_Node *node, int agent_id = -1);
@@ -48,6 +50,7 @@ class CBS {
   Heuristic h_values;
   Config config;
   const Map *map;
+  std::vector<std::list<Constraint>> external_constraints_;
 };
 
 #endif  // CBS_H
