@@ -20,6 +20,81 @@ struct DebugSnapshot {
   unsigned int focal_best_conflicts;
 };
 
+namespace {
+
+struct ConstraintStats {
+  int total = 0;
+  int positive = 0;
+  int negative = 0;
+  int node = 0;
+  int edge = 0;
+};
+
+void add_constraint_stat(const Constraint &constraint, ConstraintStats &stats) {
+  stats.total++;
+  if (constraint.positive)
+    stats.positive++;
+  else
+    stats.negative++;
+
+  if (constraint.id1 == constraint.id2)
+    stats.node++;
+  else
+    stats.edge++;
+}
+
+ConstraintStats count_constraints(const std::list<Constraint> &constraints) {
+  ConstraintStats stats;
+  for (const auto &constraint : constraints) {
+    add_constraint_stat(constraint, stats);
+  }
+  return stats;
+}
+
+void log_external_constraints_summary(
+    const std::vector<std::list<Constraint>> &external_constraints,
+    const Task &task, const std::string &prefix) {
+  if (external_constraints.empty()) return;
+
+  ConstraintStats total_stats;
+  std::vector<ConstraintStats> agent_stats(task.get_agents_size());
+  int agents_with_constraints = 0;
+
+  for (int i = 0; i < int(task.get_agents_size()); i++) {
+    if (i >= int(external_constraints.size())) continue;
+
+    agent_stats[i] = count_constraints(external_constraints.at(i));
+    if (agent_stats[i].total > 0) agents_with_constraints++;
+
+    total_stats.total += agent_stats[i].total;
+    total_stats.positive += agent_stats[i].positive;
+    total_stats.negative += agent_stats[i].negative;
+    total_stats.node += agent_stats[i].node;
+    total_stats.edge += agent_stats[i].edge;
+  }
+
+  ROS_WARN(
+      "%scbsKernal: external constraints: agents_with_constraints=%d/%d, "
+      "total=%d, positive=%d, negative=%d, node=%d, edge=%d",
+      prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
+      total_stats.total, total_stats.positive, total_stats.negative,
+      total_stats.node, total_stats.edge);
+
+  for (int i = 0; i < int(task.get_agents_size()); i++) {
+    if (agent_stats[i].total == 0) continue;
+
+    Agent agent = task.get_agent(i);
+    ROS_WARN(
+        "%scbsKernal: external constraints: agent idx=%d id=%d total=%d "
+        "positive=%d negative=%d node=%d edge=%d",
+        prefix.c_str(), i, agent.id, agent_stats[i].total,
+        agent_stats[i].positive, agent_stats[i].negative, agent_stats[i].node,
+        agent_stats[i].edge);
+  }
+}
+
+}  // namespace
+
 bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
                     const std::string &prefix) {
   CBS_Node root;
@@ -30,6 +105,14 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     std::list<Constraint> root_constraints;
     if (i < int(external_constraints_.size())) {
       root_constraints = external_constraints_.at(i);
+    }
+    if (verbose && !root_constraints.empty()) {
+      ConstraintStats root_stats = count_constraints(root_constraints);
+      ROS_WARN(
+          "%scbsKernal: initRoot(): agent idx=%d id=%d uses external "
+          "constraints=%d positive=%d negative=%d node=%d edge=%d",
+          prefix.c_str(), i, agent.id, root_stats.total, root_stats.positive,
+          root_stats.negative, root_stats.node, root_stats.edge);
     }
     path = planner.find_path(agent, map, root_constraints, h_values);
     if (path.cost < 0) {
@@ -292,6 +375,9 @@ Solution CBS::find_solution(
   config = cfg;
   this->map = &map;
   external_constraints_ = external_constraints;
+  if (verbose) {
+    log_external_constraints_summary(external_constraints_, task, prefix);
+  }
   h_values.init(map.get_size(), task.get_agents_size());
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
