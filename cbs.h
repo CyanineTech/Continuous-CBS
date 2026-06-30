@@ -20,7 +20,9 @@ class CBS {
                          const bool verbose = false,
                          const std::string &prefix = "",
                          const std::vector<std::list<Constraint>>
-                             &external_constraints = {});
+                             &external_constraints = {},
+                         const std::vector<std::string>
+                             &external_constraint_descriptions = {});
   bool init_root(const Map &map, const Task &task, const bool &verbose = false,
                  const std::string &prefix = "");
   std::list<Constraint> get_constraints(CBS_Node *node, int agent_id = -1);
@@ -51,6 +53,7 @@ class CBS {
   Config config;
   const Map *map;
   std::vector<std::list<Constraint>> external_constraints_;
+  std::vector<std::string> external_constraint_descriptions_;
 };
 
 #endif  // CBS_H

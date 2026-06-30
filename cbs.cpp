@@ -53,6 +53,7 @@ ConstraintStats count_constraints(const std::list<Constraint> &constraints) {
 
 void log_external_constraints_summary(
     const std::vector<std::list<Constraint>> &external_constraints,
+    const std::vector<std::string> &external_constraint_descriptions,
     const Task &task, const std::string &prefix) {
   if (external_constraints.empty()) return;
 
@@ -82,6 +83,13 @@ void log_external_constraints_summary(
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     if (agent_stats[i].total == 0) continue;
+
+    if (i < int(external_constraint_descriptions.size()) &&
+        !external_constraint_descriptions.at(i).empty()) {
+      ROS_WARN("%scbsKernal: external constraints: %s", prefix.c_str(),
+               external_constraint_descriptions.at(i).c_str());
+      continue;
+    }
 
     Agent agent = task.get_agent(i);
     ROS_WARN(
@@ -367,7 +375,8 @@ Conflict CBS::get_conflict(std::list<Conflict> &conflicts) {
 Solution CBS::find_solution(
     const Map &map, const Task &task, const Config &cfg, const bool verbose,
     const std::string &prefix,
-    const std::vector<std::list<Constraint>> &external_constraints) {
+    const std::vector<std::list<Constraint>> &external_constraints,
+    const std::vector<std::string> &external_constraint_descriptions) {
   if (verbose) {
     ROS_WARN("%scbsKernal: findSolution(): ", prefix.c_str());
   }
@@ -375,8 +384,11 @@ Solution CBS::find_solution(
   config = cfg;
   this->map = &map;
   external_constraints_ = external_constraints;
+  external_constraint_descriptions_ = external_constraint_descriptions;
   if (verbose) {
-    log_external_constraints_summary(external_constraints_, task, prefix);
+    log_external_constraints_summary(external_constraints_,
+                                     external_constraint_descriptions_, task,
+                                     prefix);
   }
   h_values.init(map.get_size(), task.get_agents_size());
 
