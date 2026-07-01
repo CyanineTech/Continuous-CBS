@@ -1,6 +1,8 @@
 #include "cbs.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <vector>
 
@@ -51,11 +53,131 @@ ConstraintStats count_constraints(const std::list<Constraint> &constraints) {
   return stats;
 }
 
+void hash_combine_u64(uint64_t &hash, uint64_t value) {
+  static const uint64_t kFnvPrime = 1099511628211ull;
+  for (int i = 0; i < 8; ++i) {
+    hash ^= (value & 0xffu);
+    hash *= kFnvPrime;
+    value >>= 8;
+  }
+}
+
+void hash_combine_i64(uint64_t &hash, int64_t value) {
+  hash_combine_u64(hash, static_cast<uint64_t>(value));
+}
+
+void hash_combine_string(uint64_t &hash, const std::string &value) {
+  static const uint64_t kFnvPrime = 1099511628211ull;
+  for (unsigned char ch : value) {
+    hash ^= ch;
+    hash *= kFnvPrime;
+  }
+  hash_combine_u64(hash, 0xffu);
+}
+
+int64_t quantize_constraint_time(double value) {
+  return static_cast<int64_t>(std::llround(value * 1000.0));
+}
+
+uint64_t fingerprint_external_constraints(
+    const std::vector<std::list<Constraint>> &external_constraints,
+    const std::vector<std::string> &external_constraint_descriptions,
+    const Task &task) {
+  uint64_t fingerprint = 1469598103934665603ull;
+
+  hash_combine_u64(fingerprint, external_constraints.size());
+  hash_combine_u64(fingerprint, external_constraint_descriptions.size());
+  hash_combine_u64(fingerprint, task.get_agents_size());
+
+  for (int i = 0; i < int(task.get_agents_size()); ++i) {
+    const Agent agent = task.get_agent(i);
+    hash_combine_i64(fingerprint, i);
+    hash_combine_i64(fingerprint, agent.id);
+    hash_combine_i64(fingerprint, agent.start_id);
+    hash_combine_i64(fingerprint, agent.goal_id);
+  }
+
+  for (size_t i = 0; i < external_constraints.size(); ++i) {
+    hash_combine_u64(fingerprint, i);
+    hash_combine_u64(fingerprint, external_constraints.at(i).size());
+    for (const auto &constraint : external_constraints.at(i)) {
+      hash_combine_i64(fingerprint, constraint.agent);
+      hash_combine_i64(fingerprint, constraint.positive ? 1 : 0);
+      hash_combine_i64(fingerprint, constraint.id1);
+      hash_combine_i64(fingerprint, constraint.id2);
+      hash_combine_i64(fingerprint, quantize_constraint_time(constraint.t1));
+      hash_combine_i64(fingerprint, quantize_constraint_time(constraint.t2));
+    }
+  }
+
+  for (const auto &description : external_constraint_descriptions) {
+    hash_combine_string(fingerprint, description);
+  }
+
+  return fingerprint;
+}
+
+uint64_t fingerprint_failure_snapshots(
+    const std::vector<DebugSnapshot> &snapshots, int snapshot_idx,
+    int snapshot_buffer_size, int expanded, const Config &config) {
+  uint64_t fingerprint = 1469598103934665603ull;
+  const int count = std::min(snapshot_idx, snapshot_buffer_size);
+
+  hash_combine_i64(fingerprint, expanded);
+  hash_combine_i64(fingerprint, count);
+  hash_combine_i64(fingerprint, config.use_cardinal ? 1 : 0);
+  hash_combine_i64(fingerprint, config.use_disjoint_splitting ? 1 : 0);
+  hash_combine_i64(fingerprint, config.hlh_type);
+  hash_combine_i64(fingerprint, quantize_constraint_time(config.agent_size));
+  hash_combine_i64(fingerprint, quantize_constraint_time(config.timelimit));
+
+  for (int i = 0; i < count; ++i) {
+    const int idx = (snapshot_idx - count + i) % snapshot_buffer_size;
+    const DebugSnapshot &snapshot = snapshots[idx];
+    hash_combine_i64(fingerprint, snapshot.iteration);
+    hash_combine_i64(fingerprint,
+                     quantize_constraint_time(snapshot.expanded_cost));
+    hash_combine_i64(fingerprint, snapshot.expanded_conflicts);
+    hash_combine_u64(fingerprint, snapshot.open_size);
+    hash_combine_i64(fingerprint,
+                     quantize_constraint_time(snapshot.open_best_cost));
+    hash_combine_i64(fingerprint, snapshot.open_best_conflicts);
+    hash_combine_u64(fingerprint, snapshot.focal_size);
+    hash_combine_i64(fingerprint,
+                     quantize_constraint_time(snapshot.focal_best_cost));
+    hash_combine_i64(fingerprint, snapshot.focal_best_conflicts);
+  }
+
+  return fingerprint;
+}
+
+void log_external_constraint_description(const std::string &prefix,
+                                         const std::string &description) {
+  size_t start = 0;
+  while (start < description.size()) {
+    size_t end = description.find('\n', start);
+    std::string line =
+        description.substr(start, end == std::string::npos
+                                      ? std::string::npos
+                                      : end - start);
+    if (!line.empty()) {
+      ROS_WARN("%sKernal: constraints: %s", prefix.c_str(), line.c_str());
+    }
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+}
+
 void log_external_constraints_summary(
     const std::vector<std::list<Constraint>> &external_constraints,
     const std::vector<std::string> &external_constraint_descriptions,
-    const Task &task, const std::string &prefix) {
-  if (external_constraints.empty()) return;
+    const Task &task, const std::string &prefix,
+    std::string *last_log_signature, bool *repeated_log) {
+  if (repeated_log) *repeated_log = false;
+  if (external_constraints.empty()) {
+    if (last_log_signature) last_log_signature->clear();
+    return;
+  }
 
   ConstraintStats total_stats;
   std::vector<ConstraintStats> agent_stats(task.get_agents_size());
@@ -74,20 +196,42 @@ void log_external_constraints_summary(
     total_stats.edge += agent_stats[i].edge;
   }
 
+  const uint64_t fingerprint = fingerprint_external_constraints(
+      external_constraints, external_constraint_descriptions, task);
+  const std::string current_signature =
+      prefix + "|" + std::to_string(int(task.get_agents_size())) + "|" +
+      std::to_string(fingerprint);
+
+  if (last_log_signature && *last_log_signature == current_signature) {
+    if (repeated_log) *repeated_log = true;
+    ROS_WARN(
+        "%scbsKernal: external constraints unchanged, detail suppressed: "
+        "agents_with_constraints=%d/%d, total=%d, positive=%d, negative=%d, "
+        "node=%d, edge=%d, hash=0x%016llx",
+        prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
+        total_stats.total, total_stats.positive, total_stats.negative,
+        total_stats.node, total_stats.edge,
+        static_cast<unsigned long long>(fingerprint));
+    return;
+  }
+
+  if (last_log_signature) *last_log_signature = current_signature;
+
   ROS_WARN(
       "%scbsKernal: external constraints: agents_with_constraints=%d/%d, "
-      "total=%d, positive=%d, negative=%d, node=%d, edge=%d",
+      "total=%d, positive=%d, negative=%d, node=%d, edge=%d, hash=0x%016llx",
       prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
       total_stats.total, total_stats.positive, total_stats.negative,
-      total_stats.node, total_stats.edge);
+      total_stats.node, total_stats.edge,
+      static_cast<unsigned long long>(fingerprint));
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     if (agent_stats[i].total == 0) continue;
 
     if (i < int(external_constraint_descriptions.size()) &&
         !external_constraint_descriptions.at(i).empty()) {
-      ROS_WARN("%scbsKernal: external constraints: %s", prefix.c_str(),
-               external_constraint_descriptions.at(i).c_str());
+      log_external_constraint_description(
+          prefix, external_constraint_descriptions.at(i));
       continue;
     }
 
@@ -108,6 +252,7 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
   CBS_Node root;
   tree.set_focal_weight(config.focal_weight);
   sPath path;
+  bool init_root_external_detail_suppressed = false;
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     Agent agent = task.get_agent(i);
     std::list<Constraint> root_constraints;
@@ -115,12 +260,20 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
       root_constraints = external_constraints_.at(i);
     }
     if (verbose && !root_constraints.empty()) {
-      ConstraintStats root_stats = count_constraints(root_constraints);
-      ROS_WARN(
-          "%scbsKernal: initRoot(): agent idx=%d id=%d uses external "
-          "constraints=%d positive=%d negative=%d node=%d edge=%d",
-          prefix.c_str(), i, agent.id, root_stats.total, root_stats.positive,
-          root_stats.negative, root_stats.node, root_stats.edge);
+      if (external_constraints_log_repeated_) {
+        if (!init_root_external_detail_suppressed) {
+          ROS_WARN(
+              "%sKernal: initRoot: ext unchanged, detail suppressed",
+              prefix.c_str());
+          init_root_external_detail_suppressed = true;
+        }
+      } else {
+        ConstraintStats root_stats = count_constraints(root_constraints);
+        ROS_WARN(
+            "%sKernal: initRoot: a%d(id%d) ext=%d +%d -%d n=%d e=%d",
+            prefix.c_str(), i, agent.id, root_stats.total, root_stats.positive,
+            root_stats.negative, root_stats.node, root_stats.edge);
+      }
     }
     path = planner.find_path(agent, map, root_constraints, h_values);
     if (path.cost < 0) {
@@ -385,10 +538,13 @@ Solution CBS::find_solution(
   this->map = &map;
   external_constraints_ = external_constraints;
   external_constraint_descriptions_ = external_constraint_descriptions;
+  external_constraints_log_repeated_ = false;
   if (verbose) {
     log_external_constraints_summary(external_constraints_,
                                      external_constraint_descriptions_, task,
-                                     prefix);
+                                     prefix,
+                                     &last_external_constraints_log_signature_,
+                                     &external_constraints_log_repeated_);
   }
   h_values.init(map.get_size(), task.get_agents_size());
 
@@ -636,47 +792,63 @@ Solution CBS::find_solution(
 
   // 【新增】在函数返回前，检查是否失败并打印快照
   if (!solution.found) {
-    std::cout << "\n-------------------- PLANNING FAILED --------------------"
-              << std::endl;
+    const uint64_t failure_fingerprint = fingerprint_failure_snapshots(
+        snapshots, snapshot_idx, SNAPSHOT_BUFFER_SIZE, expanded, config);
+    const std::string failure_signature =
+        prefix + "|" + std::to_string(failure_fingerprint);
 
-    // Print search configuration parameters
-    std::cout << "Search Configuration Parameters:" << std::endl;
-    std::cout << "  - Focal Weight: " << config.focal_weight << std::endl;
-    std::cout << "  - Use Cardinal: "
-              << (config.use_cardinal ? "true" : "false") << std::endl;
-    std::cout << "  - Use Disjoint Splitting: "
-              << (config.use_disjoint_splitting ? "true" : "false")
-              << std::endl;
-    std::cout << "  - HLH Type: " << config.hlh_type << std::endl;
-    std::cout << "  - Agent Size: " << config.agent_size << std::endl;
-    std::cout << "  - Time Limit: " << config.timelimit << std::endl;
-    std::cout << std::endl;
-
-    std::cout << "Total iterations: " << expanded << ". Printing last "
-              << std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE)
-              << " snapshots:" << std::endl;
-
-    for (int i = 0; i < std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE); ++i) {
-      int idx_to_print =
-          (snapshot_idx - std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE) + i) %
-          SNAPSHOT_BUFFER_SIZE;
-      const auto &s = snapshots[idx_to_print];
-
-      std::cout << "\n--- Snapshot at Iteration: " << s.iteration << " ---"
-                << std::endl;
-      std::cout << "  - Expanding Node:  Cost=" << s.expanded_cost
-                << ", Conflicts=" << s.expanded_conflicts << std::endl;
-      std::cout << "  - OPEN Status:     Size=" << s.open_size
-                << ", BestCost=" << s.open_best_cost << " (w/ "
-                << s.open_best_conflicts << " conflicts)" << std::endl;
-      if (config.focal_weight > 1.0) {
-        std::cout << "  - FOCAL Status:    Size=" << s.focal_size
-                  << ", BestConflicts=" << s.focal_best_conflicts
-                  << " (w/ cost " << s.focal_best_cost << ")" << std::endl;
+    if (last_failure_snapshot_log_signature_ == failure_signature) {
+      if (verbose) {
+        ROS_WARN(
+            "%scbsKernal: planning failed snapshot unchanged, detail "
+            "suppressed: focal_weight=%.2f, iterations=%d, hash=0x%016llx",
+            prefix.c_str(), config.focal_weight, expanded,
+            static_cast<unsigned long long>(failure_fingerprint));
       }
+    } else {
+      last_failure_snapshot_log_signature_ = failure_signature;
+      std::cout << "\n-------------------- PLANNING FAILED --------------------"
+                << std::endl;
+
+      // Print search configuration parameters
+      std::cout << "Search Configuration Parameters:" << std::endl;
+      std::cout << "  - Focal Weight: " << config.focal_weight << std::endl;
+      std::cout << "  - Use Cardinal: "
+                << (config.use_cardinal ? "true" : "false") << std::endl;
+      std::cout << "  - Use Disjoint Splitting: "
+                << (config.use_disjoint_splitting ? "true" : "false")
+                << std::endl;
+      std::cout << "  - HLH Type: " << config.hlh_type << std::endl;
+      std::cout << "  - Agent Size: " << config.agent_size << std::endl;
+      std::cout << "  - Time Limit: " << config.timelimit << std::endl;
+      std::cout << std::endl;
+
+      std::cout << "Total iterations: " << expanded << ". Printing last "
+                << std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE)
+                << " snapshots:" << std::endl;
+
+      for (int i = 0; i < std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE); ++i) {
+        int idx_to_print =
+            (snapshot_idx - std::min(snapshot_idx, SNAPSHOT_BUFFER_SIZE) + i) %
+            SNAPSHOT_BUFFER_SIZE;
+        const auto &s = snapshots[idx_to_print];
+
+        std::cout << "\n--- Snapshot at Iteration: " << s.iteration << " ---"
+                  << std::endl;
+        std::cout << "  - Expanding Node:  Cost=" << s.expanded_cost
+                  << ", Conflicts=" << s.expanded_conflicts << std::endl;
+        std::cout << "  - OPEN Status:     Size=" << s.open_size
+                  << ", BestCost=" << s.open_best_cost << " (w/ "
+                  << s.open_best_conflicts << " conflicts)" << std::endl;
+        if (config.focal_weight > 1.0) {
+          std::cout << "  - FOCAL Status:    Size=" << s.focal_size
+                    << ", BestConflicts=" << s.focal_best_conflicts
+                    << " (w/ cost " << s.focal_best_cost << ")" << std::endl;
+        }
+      }
+      std::cout << "---------------------------------------------------------"
+                << std::endl;
     }
-    std::cout << "---------------------------------------------------------"
-              << std::endl;
   }
 
   // 计算最终的时间消耗
