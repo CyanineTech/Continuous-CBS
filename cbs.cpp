@@ -205,25 +205,23 @@ void log_external_constraints_summary(
   if (last_log_signature && *last_log_signature == current_signature) {
     if (repeated_log) *repeated_log = true;
     ROS_WARN(
-        "%scbsKernal: external constraints unchanged, detail suppressed: "
+        "%sKernal: constraints unchanged, detail suppressed: "
         "agents_with_constraints=%d/%d, total=%d, positive=%d, negative=%d, "
-        "node=%d, edge=%d, hash=0x%016llx",
+        "node=%d, edge=%d",
         prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
         total_stats.total, total_stats.positive, total_stats.negative,
-        total_stats.node, total_stats.edge,
-        static_cast<unsigned long long>(fingerprint));
+        total_stats.node, total_stats.edge);
     return;
   }
 
   if (last_log_signature) *last_log_signature = current_signature;
 
   ROS_WARN(
-      "%scbsKernal: external constraints: agents_with_constraints=%d/%d, "
-      "total=%d, positive=%d, negative=%d, node=%d, edge=%d, hash=0x%016llx",
+      "%sKernal: constraints: agents_with_constraints=%d/%d, "
+      "total=%d, positive=%d, negative=%d, node=%d, edge=%d",
       prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
       total_stats.total, total_stats.positive, total_stats.negative,
-      total_stats.node, total_stats.edge,
-      static_cast<unsigned long long>(fingerprint));
+      total_stats.node, total_stats.edge);
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     if (agent_stats[i].total == 0) continue;
@@ -237,7 +235,7 @@ void log_external_constraints_summary(
 
     Agent agent = task.get_agent(i);
     ROS_WARN(
-        "%scbsKernal: external constraints: agent idx=%d id=%d total=%d "
+        "%sKernal: constraints: agent idx=%d id=%d total=%d "
         "positive=%d negative=%d node=%d edge=%d",
         prefix.c_str(), i, agent.id, agent_stats[i].total,
         agent_stats[i].positive, agent_stats[i].negative, agent_stats[i].node,
@@ -279,7 +277,7 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     if (path.cost < 0) {
       if (verbose) {
         ROS_WARN(
-            "%scbsKernal: initRoot(): i = %d, agent %d "
+            "%sKernal: initRoot(): i = %d, agent %d "
             "(start=%d, goal=%d) path.cost %.3f < 0",
             prefix.c_str(), i, agent.id, agent.start_id,
             agent.goal_id, path.cost);
@@ -291,7 +289,7 @@ bool CBS::init_root(const Map &map, const Task &task, const bool &verbose,
     if (verbose) {
       if (path.agentID != i) {
         ROS_WARN(
-            "%scbsKernal: initRoot(): i = %d, path.agentID = %d, agent.id %d "
+            "%sKernal: initRoot(): i = %d, path.agentID = %d, agent.id %d "
             "**********************",
             prefix.c_str(), i, path.agentID, agent.id);
       }
@@ -531,7 +529,7 @@ Solution CBS::find_solution(
     const std::vector<std::list<Constraint>> &external_constraints,
     const std::vector<std::string> &external_constraint_descriptions) {
   if (verbose) {
-    ROS_WARN("%scbsKernal: findSolution(): ", prefix.c_str());
+    ROS_WARN("%sKernal: findSolution(): ", prefix.c_str());
   }
 
   config = cfg;
@@ -557,7 +555,7 @@ Solution CBS::find_solution(
   int cardinal_solved = 0, semicardinal_solved = 0;
   if (!this->init_root(map, task, verbose, prefix)) {
     if (verbose) {
-      ROS_WARN("%scbsKernal: findSolution(): init-root() failed",
+      ROS_WARN("%sKernal: findSolution(): init-root() failed",
                prefix.c_str());
     }
 
@@ -565,7 +563,7 @@ Solution CBS::find_solution(
   }
 
   if (verbose) {
-    ROS_WARN("%scbsKernal:  init_root done", prefix.c_str());
+    ROS_WARN("%sKernal: initRoot: done", prefix.c_str());
   }
 
   solution.init_time =
@@ -634,7 +632,7 @@ Solution CBS::find_solution(
         cardinal_conflicts.empty()     //
     ) {
       if (verbose) {
-        ROS_WARN("%scbsKernal: findSolution(): No conflicts found, break",
+        ROS_WARN("%sKernal: findSolution(): No conflicts found, break",
                  prefix.c_str());
       }
       solution.found = true;  // 【修改】在这里设置 solution.found 为 true
@@ -780,7 +778,7 @@ Solution CBS::find_solution(
     if (time_spent.count() > config.timelimit) {
       if (verbose) {
         ROS_WARN(
-            "%scbsKernal: findSolution(): do(): Time limit %.3f exceeded, "
+            "%sKernal: findSolution(): do(): Time limit %.3f exceeded, "
             "break!",
             prefix.c_str(), time_spent.count());
       }
@@ -800,7 +798,7 @@ Solution CBS::find_solution(
     if (last_failure_snapshot_log_signature_ == failure_signature) {
       if (verbose) {
         ROS_WARN(
-            "%scbsKernal: planning failed snapshot unchanged, detail "
+            "%sKernal: planning failed snapshot unchanged, detail "
             "suppressed: focal_weight=%.2f, iterations=%d, hash=0x%016llx",
             prefix.c_str(), config.focal_weight, expanded,
             static_cast<unsigned long long>(failure_fingerprint));
@@ -858,21 +856,21 @@ Solution CBS::find_solution(
   // 打印搜索结束的统计信息
   if (verbose) {
     ROS_WARN(
-        "%scbsKernal: findSolution(): Search completed! Found: %s, Time: %.3fs",
+        "%sKernal: findSolution(): Search completed! Found: %s, Time: %.3fs",
         prefix.c_str(), solution.found ? "YES" : "NO", final_time.count());
     ROS_WARN(
-        "%scbsKernal: findSolution(): High-level: expanded %d, generated %d, "
+        "%sKernal: findSolution(): High-level: expanded %d, generated %d, "
         "open size %d",
         prefix.c_str(), expanded, int(tree.get_size()),
         int(tree.get_open_size()));
     ROS_WARN(
-        "%scbsKernal: findSolution(): Low-level: searches %d, avg expanded "
+        "%sKernal: findSolution(): Low-level: searches %d, avg expanded "
         "%.1f",
         prefix.c_str(), low_level_searches,
         low_level_searches > 0 ? double(low_level_expanded) / low_level_searches
                                : 0.0);
     ROS_WARN(
-        "%scbsKernal: findSolution(): Conflicts: cardinal %d, semicardinal %d",
+        "%sKernal: findSolution(): Conflicts: cardinal %d, semicardinal %d",
         prefix.c_str(), cardinal_solved, semicardinal_solved);
   }
 
