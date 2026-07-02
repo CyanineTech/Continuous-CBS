@@ -117,40 +117,6 @@ uint64_t fingerprint_external_constraints(
   return fingerprint;
 }
 
-uint64_t fingerprint_failure_snapshots(
-    const std::vector<DebugSnapshot> &snapshots, int snapshot_idx,
-    int snapshot_buffer_size, int expanded, const Config &config) {
-  uint64_t fingerprint = 1469598103934665603ull;
-  const int count = std::min(snapshot_idx, snapshot_buffer_size);
-
-  hash_combine_i64(fingerprint, expanded);
-  hash_combine_i64(fingerprint, count);
-  hash_combine_i64(fingerprint, config.use_cardinal ? 1 : 0);
-  hash_combine_i64(fingerprint, config.use_disjoint_splitting ? 1 : 0);
-  hash_combine_i64(fingerprint, config.hlh_type);
-  hash_combine_i64(fingerprint, quantize_constraint_time(config.agent_size));
-  hash_combine_i64(fingerprint, quantize_constraint_time(config.timelimit));
-
-  for (int i = 0; i < count; ++i) {
-    const int idx = (snapshot_idx - count + i) % snapshot_buffer_size;
-    const DebugSnapshot &snapshot = snapshots[idx];
-    hash_combine_i64(fingerprint, snapshot.iteration);
-    hash_combine_i64(fingerprint,
-                     quantize_constraint_time(snapshot.expanded_cost));
-    hash_combine_i64(fingerprint, snapshot.expanded_conflicts);
-    hash_combine_u64(fingerprint, snapshot.open_size);
-    hash_combine_i64(fingerprint,
-                     quantize_constraint_time(snapshot.open_best_cost));
-    hash_combine_i64(fingerprint, snapshot.open_best_conflicts);
-    hash_combine_u64(fingerprint, snapshot.focal_size);
-    hash_combine_i64(fingerprint,
-                     quantize_constraint_time(snapshot.focal_best_cost));
-    hash_combine_i64(fingerprint, snapshot.focal_best_conflicts);
-  }
-
-  return fingerprint;
-}
-
 void log_external_constraint_description(const std::string &prefix,
                                          const std::string &description) {
   size_t start = 0;
@@ -789,22 +755,12 @@ Solution CBS::find_solution(
   } while (tree.get_open_size() > 0);
 
   // 【新增】在函数返回前，检查是否失败并打印快照
+  bool failure_detail_suppressed = false;
   if (!solution.found) {
-    const uint64_t failure_fingerprint = fingerprint_failure_snapshots(
-        snapshots, snapshot_idx, SNAPSHOT_BUFFER_SIZE, expanded, config);
-    const std::string failure_signature =
-        prefix + "|" + std::to_string(failure_fingerprint);
-
-    if (last_failure_snapshot_log_signature_ == failure_signature) {
-      if (verbose) {
-        ROS_WARN(
-            "%sKernal: planning failed snapshot unchanged, detail "
-            "suppressed: focal_weight=%.2f, iterations=%d, hash=0x%016llx",
-            prefix.c_str(), config.focal_weight, expanded,
-            static_cast<unsigned long long>(failure_fingerprint));
-      }
+    if (failure_snapshot_detail_printed_) {
+      failure_detail_suppressed = true;
     } else {
-      last_failure_snapshot_log_signature_ = failure_signature;
+      failure_snapshot_detail_printed_ = true;
       std::cout << "\n-------------------- PLANNING FAILED --------------------"
                 << std::endl;
 
@@ -855,23 +811,34 @@ Solution CBS::find_solution(
 
   // 打印搜索结束的统计信息
   if (verbose) {
-    ROS_WARN(
-        "%sKernal: findSolution(): Search completed! Found: %s, Time: %.3fs",
-        prefix.c_str(), solution.found ? "YES" : "NO", final_time.count());
-    ROS_WARN(
-        "%sKernal: findSolution(): High-level: expanded %d, generated %d, "
-        "open size %d",
-        prefix.c_str(), expanded, int(tree.get_size()),
-        int(tree.get_open_size()));
-    ROS_WARN(
-        "%sKernal: findSolution(): Low-level: searches %d, avg expanded "
-        "%.1f",
-        prefix.c_str(), low_level_searches,
+    const double avg_low_level_expanded =
         low_level_searches > 0 ? double(low_level_expanded) / low_level_searches
-                               : 0.0);
-    ROS_WARN(
-        "%sKernal: findSolution(): Conflicts: cardinal %d, semicardinal %d",
-        prefix.c_str(), cardinal_solved, semicardinal_solved);
+                               : 0.0;
+    if (!solution.found && failure_detail_suppressed) {
+      ROS_WARN(
+          "%sKernal: failed, snapshot suppressed: focal_weight=%.2f, "
+          "time=%.3fs, expanded=%d, generated=%d, open=%d, low=%d/%.1f, "
+          "conflicts(card=%d, semi=%d)",
+          prefix.c_str(), config.focal_weight, final_time.count(), expanded,
+          int(tree.get_size()), int(tree.get_open_size()), low_level_searches,
+          avg_low_level_expanded, cardinal_solved, semicardinal_solved);
+    } else {
+      ROS_WARN(
+          "%sKernal: findSolution(): Search completed! Found: %s, Time: %.3fs",
+          prefix.c_str(), solution.found ? "YES" : "NO", final_time.count());
+      ROS_WARN(
+          "%sKernal: findSolution(): High-level: expanded %d, generated %d, "
+          "open size %d",
+          prefix.c_str(), expanded, int(tree.get_size()),
+          int(tree.get_open_size()));
+      ROS_WARN(
+          "%sKernal: findSolution(): Low-level: searches %d, avg expanded "
+          "%.1f",
+          prefix.c_str(), low_level_searches, avg_low_level_expanded);
+      ROS_WARN(
+          "%sKernal: findSolution(): Conflicts: cardinal %d, semicardinal %d",
+          prefix.c_str(), cardinal_solved, semicardinal_solved);
+    }
   }
 
   solution.paths = get_paths(&node, task.get_agents_size());

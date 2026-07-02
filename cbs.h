@@ -55,8 +55,8 @@ class CBS {
   std::vector<std::list<Constraint>> external_constraints_;
   std::vector<std::string> external_constraint_descriptions_;
   std::string last_external_constraints_log_signature_;
-  std::string last_failure_snapshot_log_signature_;
   bool external_constraints_log_repeated_ = false;
+  bool failure_snapshot_detail_printed_ = false;
 };
 
 #endif  // CBS_H
