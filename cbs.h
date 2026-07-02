@@ -45,6 +45,15 @@ class CBS {
                           int &low_level_searches, int &low_level_expanded);
   double get_cost(CBS_Node node, int agent_id);
   std::vector<sPath> get_paths(CBS_Node *node, unsigned int agents_size);
+  bool wait_respects_constraints(const std::list<Constraint> &constraints,
+                                 int agent_id, int wait_node, double t1,
+                                 double t2);
+  bool try_compress_backtrack(std::vector<sPath> &paths, int agent_idx,
+                              int node_idx, CBS_Node *final_node,
+                              const std::string &prefix);
+  int compress_safe_backtracks(std::vector<sPath> &paths,
+                               CBS_Node *final_node,
+                               const std::string &prefix);
   Conflict get_conflict(std::list<Conflict> &conflicts);
   CBS_Tree tree;
   SIPP planner;

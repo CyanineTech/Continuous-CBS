@@ -47,6 +47,7 @@ struct gNode {
 struct Node {
   int id;
   double f, g, i, j;
+  double route_penalty;
   Node* parent;
   std::pair<double, double> interval;
   int interval_id;
@@ -58,6 +59,7 @@ struct Node {
         g(_g),
         i(_i),
         j(_j),
+        route_penalty(0.0),
         parent(_parent),
         interval(std::make_pair(begin, end)) {
     interval_id = 0;

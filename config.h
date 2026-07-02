@@ -20,6 +20,10 @@ public:
     int     connectdness;
     double  agent_size;
     double  timelimit;
+    bool    anti_backtrack_penalty_enable;
+    double  anti_backtrack_penalty_m;
+    bool    safe_backtrack_compress_enable;
+    int     safe_backtrack_compress_max_passes;
 };
 
 #endif // CONFIG_H

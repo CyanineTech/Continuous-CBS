@@ -10,6 +10,7 @@ void SIPP::clear() {
   constraints.clear();
   visited.clear();
   path.cost = -1;
+  backtrack_penalty_logged = false;
 }
 
 double SIPP::dist(const Node &a, const Node &b) {
@@ -26,6 +27,17 @@ void SIPP::find_successors(Node curNode, const Map &map, std::list<Node> &succs,
     newNode.id = move.id;
     double cost = dist(curNode, newNode);
     newNode.g = curNode.g + cost;
+    newNode.route_penalty = curNode.route_penalty;
+    if (anti_backtrack_penalty_enable && anti_backtrack_penalty_m > 0.0 &&
+        curNode.parent != nullptr && newNode.id == curNode.parent->id) {
+      newNode.route_penalty += anti_backtrack_penalty_m;
+      if (!backtrack_penalty_logged) {
+        ROS_WARN_THROTTLE(
+            1.0, "anti-fold: a%d, penalty hit n%d->n%d->n%d",
+            agent.id, curNode.parent->id, curNode.id, newNode.id);
+        backtrack_penalty_logged = true;
+      }
+    }
     std::vector<std::pair<double, double>> intervals(0);
     auto colls_it = collision_intervals.find(newNode.id);
     if (colls_it != collision_intervals.end()) {
@@ -67,7 +79,8 @@ void SIPP::find_successors(Node curNode, const Map &map, std::list<Node> &succs,
         visited.insert({newNode.id + newNode.interval_id * map.get_size(),
                         {newNode.g, false}});
       if (goal.id == agent.goal_id)  // perfect heuristic is known
-        newNode.f = newNode.g + h_values.get_value(newNode.id, agent.id);
+        newNode.f = newNode.g + h_values.get_value(newNode.id, agent.id) +
+                    newNode.route_penalty;
       else {
         double h =
             sqrt(pow(goal.i - newNode.i, 2) + pow(goal.j - newNode.j, 2));
@@ -75,7 +88,7 @@ void SIPP::find_successors(Node curNode, const Map &map, std::list<Node> &succs,
              i++)  // differential heuristic with pivots placed to agents goals
           h = std::max(h, fabs(h_values.get_value(newNode.id, i) -
                                h_values.get_value(goal.id, i)));
-        newNode.f = newNode.g + h;
+        newNode.f = newNode.g + h + newNode.route_penalty;
       }
       succs.push_back(newNode);
     }

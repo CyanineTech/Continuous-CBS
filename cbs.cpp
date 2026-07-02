@@ -79,6 +79,10 @@ int64_t quantize_constraint_time(double value) {
   return static_cast<int64_t>(std::llround(value * 1000.0));
 }
 
+bool intervals_overlap(double a1, double a2, double b1, double b2) {
+  return a1 < b2 + CN_EPSILON && b1 < a2 + CN_EPSILON;
+}
+
 uint64_t fingerprint_external_constraints(
     const std::vector<std::list<Constraint>> &external_constraints,
     const std::vector<std::string> &external_constraint_descriptions,
@@ -171,9 +175,8 @@ void log_external_constraints_summary(
   if (last_log_signature && *last_log_signature == current_signature) {
     if (repeated_log) *repeated_log = true;
     ROS_WARN(
-        "%sKernal: constraints unchanged, detail suppressed: "
-        "agents_with_constraints=%d/%d, total=%d, positive=%d, negative=%d, "
-        "node=%d, edge=%d",
+        "%sKernal: same constr: agents_with_cons=%d/%d, total=%d, "
+        "posi=%d, nega=%d, n..%d, e..%d",
         prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
         total_stats.total, total_stats.positive, total_stats.negative,
         total_stats.node, total_stats.edge);
@@ -183,11 +186,11 @@ void log_external_constraints_summary(
   if (last_log_signature) *last_log_signature = current_signature;
 
   ROS_WARN(
-      "%sKernal: constraints: agents_with_constraints=%d/%d, "
-      "total=%d, positive=%d, negative=%d, node=%d, edge=%d",
+      "%sKernal: constraint: agents_with_cons=%d/%d, posi=%d, nega=%d, "
+      "n..%d, e..%d",
       prefix.c_str(), agents_with_constraints, int(task.get_agents_size()),
-      total_stats.total, total_stats.positive, total_stats.negative,
-      total_stats.node, total_stats.edge);
+      total_stats.positive, total_stats.negative, total_stats.node,
+      total_stats.edge);
 
   for (int i = 0; i < int(task.get_agents_size()); i++) {
     if (agent_stats[i].total == 0) continue;
@@ -500,6 +503,8 @@ Solution CBS::find_solution(
 
   config = cfg;
   this->map = &map;
+  planner.set_backtrack_penalty(config.anti_backtrack_penalty_enable,
+                                config.anti_backtrack_penalty_m);
   external_constraints_ = external_constraints;
   external_constraint_descriptions_ = external_constraint_descriptions;
   external_constraints_log_repeated_ = false;
@@ -816,11 +821,10 @@ Solution CBS::find_solution(
                                : 0.0;
     if (!solution.found && failure_detail_suppressed) {
       ROS_WARN(
-          "%sKernal: failed, snapshot suppressed: focal_weight=%.2f, "
-          "time=%.3fs, expanded=%d, generated=%d, open=%d, low=%d/%.1f, "
-          "conflicts(card=%d, semi=%d)",
-          prefix.c_str(), config.focal_weight, final_time.count(), expanded,
-          int(tree.get_size()), int(tree.get_open_size()), low_level_searches,
+          "%sKernal: failed, focal_weight=%.2f, exp=%d, gen=%d, open=%d, "
+          "low=%d/%.1f, conf(card=%d, semi=%d)",
+          prefix.c_str(), config.focal_weight, expanded, int(tree.get_size()),
+          int(tree.get_open_size()), low_level_searches,
           avg_low_level_expanded, cardinal_solved, semicardinal_solved);
     } else {
       ROS_WARN(
@@ -842,6 +846,13 @@ Solution CBS::find_solution(
   }
 
   solution.paths = get_paths(&node, task.get_agents_size());
+  if (solution.found && config.safe_backtrack_compress_enable) {
+    const int compressed =
+        compress_safe_backtracks(solution.paths, &node, prefix);
+    if (compressed > 0 && verbose) {
+      ROS_WARN("%ssafe-compress: compressed=%d", prefix.c_str(), compressed);
+    }
+  }
   solution.flowtime = node.cost;
   solution.low_level_expansions = low_level_searches;
   solution.low_level_expanded =
@@ -1117,4 +1128,99 @@ std::vector<sPath> CBS::get_paths(CBS_Node *node, unsigned int agents_size) {
   for (unsigned int i = 0; i < agents_size; i++)
     if (paths.at(i).cost < 0) paths.at(i) = curNode->paths.at(i);
   return paths;
+}
+
+bool CBS::wait_respects_constraints(const std::list<Constraint> &constraints,
+                                    int agent_id, int wait_node, double t1,
+                                    double t2) {
+  if (t2 <= t1 + CN_EPSILON) return false;
+
+  for (const auto &constraint : constraints) {
+    if (constraint.agent >= 0 && constraint.agent != agent_id) continue;
+    if (!intervals_overlap(t1, t2, constraint.t1, constraint.t2)) continue;
+
+    if (constraint.positive) {
+      if (!(constraint.id1 == wait_node && constraint.id2 == wait_node)) {
+        return false;
+      }
+      continue;
+    }
+
+    if (constraint.id1 == constraint.id2 && constraint.id1 == wait_node) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool CBS::try_compress_backtrack(std::vector<sPath> &paths, int agent_idx,
+                                 int node_idx, CBS_Node *final_node,
+                                 const std::string &prefix) {
+  if (agent_idx < 0 || agent_idx >= int(paths.size())) return false;
+  sPath &path = paths.at(agent_idx);
+  if (node_idx < 0 || node_idx + 2 >= int(path.nodes.size())) return false;
+
+  const int a = path.nodes.at(node_idx).id;
+  const int b = path.nodes.at(node_idx + 1).id;
+  const int c = path.nodes.at(node_idx + 2).id;
+  if (a != c || a == b) return false;
+
+  const double t1 = path.nodes.at(node_idx).g;
+  const double t2 = path.nodes.at(node_idx + 2).g;
+  const auto constraints = get_constraints(final_node, agent_idx);
+  if (!wait_respects_constraints(constraints, agent_idx, a, t1, t2)) {
+    ROS_WARN("%ssafe-compress: a%d, keep n%d n%d n%d (constraint)",
+             prefix.c_str(), agent_idx, a, b, c);
+    return false;
+  }
+
+  sPath candidate = path;
+  candidate.nodes.erase(candidate.nodes.begin() + node_idx + 1);
+
+  std::vector<sPath> candidate_paths = paths;
+  candidate_paths.at(agent_idx) = candidate;
+  if (!get_all_conflicts(candidate_paths, agent_idx).empty()) {
+    ROS_WARN("%ssafe-compress: a%d, keep n%d n%d n%d (conflict)",
+             prefix.c_str(), agent_idx, a, b, c);
+    return false;
+  }
+
+  const int before = int(path.nodes.size());
+  path = candidate;
+  ROS_WARN("%ssafe-compress: a%d, n%d n%d n%d -> wait@n%d, nodes %d->%d",
+           prefix.c_str(), agent_idx, a, b, c, a, before,
+           int(path.nodes.size()));
+  return true;
+}
+
+int CBS::compress_safe_backtracks(std::vector<sPath> &paths,
+                                  CBS_Node *final_node,
+                                  const std::string &prefix) {
+  if (!config.safe_backtrack_compress_enable ||
+      config.safe_backtrack_compress_max_passes <= 0) {
+    return 0;
+  }
+
+  int compressed = 0;
+  const int max_passes = std::max(config.safe_backtrack_compress_max_passes, 1);
+  for (int pass = 0; pass < max_passes; ++pass) {
+    bool changed = false;
+    for (int agent_idx = 0; agent_idx < int(paths.size()); ++agent_idx) {
+      int node_idx = 0;
+      while (node_idx + 2 < int(paths.at(agent_idx).nodes.size())) {
+        if (try_compress_backtrack(paths, agent_idx, node_idx, final_node,
+                                   prefix)) {
+          compressed++;
+          changed = true;
+          if (node_idx > 0) node_idx--;
+          continue;
+        }
+        node_idx++;
+      }
+    }
+    if (!changed) break;
+  }
+
+  return compressed;
 }

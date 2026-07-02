@@ -8,6 +8,10 @@ Config::Config()
     timelimit = CN_TIMELIMIT;
     focal_weight = CN_FOCAL_WEIGHT;
     precision = CN_PRECISION;
+    anti_backtrack_penalty_enable = true;
+    anti_backtrack_penalty_m = 5.0;
+    safe_backtrack_compress_enable = true;
+    safe_backtrack_compress_max_passes = 3;
 }
 
 

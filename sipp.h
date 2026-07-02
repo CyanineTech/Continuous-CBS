@@ -12,6 +12,10 @@ public:
 
     SIPP()  {}
     ~SIPP() {}
+    void set_backtrack_penalty(bool enable, double penalty_m) {
+        anti_backtrack_penalty_enable = enable;
+        anti_backtrack_penalty_m = penalty_m;
+    }
     Path find_path(Agent agent, const Map &map, std::list<Constraint> cons, Heuristic &h_values);
 
 private:
@@ -37,6 +41,9 @@ private:
     std::unordered_map<int, std::vector<std::pair<double, double>>> collision_intervals;//stores sets of collision intervals associated with cells
     std::vector<Move> landmarks;
     Path path;
+    bool anti_backtrack_penalty_enable = true;
+    double anti_backtrack_penalty_m = 5.0;
+    bool backtrack_penalty_logged = false;
 };
 
 #endif // SIPP_H
