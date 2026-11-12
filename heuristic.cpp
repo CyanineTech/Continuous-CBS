@@ -10,6 +10,16 @@ void Heuristic::init(unsigned int size, unsigned int agents)
 
 void Heuristic::count(const Map &map, Agent agent)
 {
+    // Distances to the goal require incoming edges, including temporary removals.
+    std::vector<std::vector<Node>> incoming(map.get_size());
+    const auto &moves = map.get_valid_moves();
+    for(int from = 0; from < map.get_size(); ++from)
+    {
+        h_values[from][agent.id] = -1;
+        for(const auto &move : moves[from])
+            incoming[move.id].emplace_back(from, 0, 0,
+                                           map.get_i(from), map.get_j(from));
+    }
     Node curNode(agent.goal_id, 0, 0, agent.goal_i, agent.goal_j), newNode;
     open.clear();
     open.insert(curNode);
@@ -17,7 +27,7 @@ void Heuristic::count(const Map &map, Agent agent)
     {
         curNode = find_min();
         h_values[curNode.id][agent.id] = curNode.g;
-        std::vector<Node> valid_moves = map.get_valid_moves(curNode.id);
+        const auto &valid_moves = incoming[curNode.id];
         for(auto move: valid_moves)
         {
             newNode.i = move.i;

@@ -1,5 +1,7 @@
 #include "sipp.h"
 
+#include <cmath>
+
 #include <ros/ros.h>
 
 void SIPP::clear() {
@@ -78,18 +80,21 @@ void SIPP::find_successors(Node curNode, const Map &map, std::list<Node> &succs,
       } else
         visited.insert({newNode.id + newNode.interval_id * map.get_size(),
                         {newNode.g, false}});
-      if (goal.id == agent.goal_id)  // perfect heuristic is known
-        newNode.f = newNode.g + h_values.get_value(newNode.id, agent.id) +
-                    newNode.route_penalty;
-      else {
-        double h =
-            sqrt(pow(goal.i - newNode.i, 2) + pow(goal.j - newNode.j, 2));
-        for (unsigned int i = 0; i < h_values.get_size();
-             i++)  // differential heuristic with pivots placed to agents goals
-          h = std::max(h, fabs(h_values.get_value(newNode.id, i) -
-                               h_values.get_value(goal.id, i)));
-        newNode.f = newNode.g + h + newNode.route_penalty;
+      double h = dist(newNode, goal);
+      if (goal.id == agent.goal_id) {
+        const double remaining = h_values.get_value(newNode.id, agent.id);
+        if (remaining >= 0.0 && std::isfinite(remaining)) h = remaining;
+      } else {
+        // For directed distances to pivot p: d(v,t) >= d(v,p) - d(t,p).
+        for (unsigned int i = 0; i < h_values.get_size(); ++i) {
+          const double from = h_values.get_value(newNode.id, i);
+          const double to = h_values.get_value(goal.id, i);
+          if (from >= 0.0 && to >= 0.0 &&
+              std::isfinite(from) && std::isfinite(to))
+            h = std::max(h, from - to);
+        }
       }
+      newNode.f = newNode.g + h + newNode.route_penalty;
       succs.push_back(newNode);
     }
   }
